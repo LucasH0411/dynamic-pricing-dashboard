@@ -1,10 +1,16 @@
-# Dynamic Pricing Dashboard
+# Advanced Dynamic Pricing Simulation (Fashion Retail)
 
-Dieses interaktive Dashboard simuliert die Auswirkungen von Dynamic Pricing auf Nachfrage, Preis und Umsatz.
+This Streamlit app simulates dynamic pricing in the fashion industry over 12 weeks.
 
-## So funktioniert's
+## Features
+- Two customer segments (price-sensitive & loyal)
+- Churn modeling based on pricing behavior
+- Price volatility penalty
+- Interactive sliders with economic interpretations
+- Key KPIs: revenue, churn, price, segment demand
 
-- Nutze die Sliders in der Sidebar, um Basispreis, Preiselastizität, Zeitabhängigkeit und Nachfrage einzustellen.
-- Beobachte, wie sich die KPIs im Zeitverlauf ändern.
-
-
+## Deployment
+1. Upload to a GitHub repository
+2. Connect with [Streamlit Cloud](https://streamlit.io/cloud)
+3. Set `app.py` as entry point
+4. Share the generated link with students
