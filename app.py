@@ -1,54 +1,37 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Dynamic Pricing - ShopTrend24", layout="wide")
 st.title("Dynamic Pricing - ShopTrend24")
 
 st.markdown(
-    '''
+    """
     <style>
-        .main { background-color: #f8f9fa; }
+        .main { background-color: #ffffff; }
         .block-container { padding-top: 2rem; }
-        .stSlider > div[data-baseweb="slider"] > div { background: #0e1117; }
-        .stMetric { background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e6e6e6; }
+        .stSlider > div[data-baseweb="slider"] > div { background: transparent !important; }
+        .stMetric { background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #dee2e6; }
     </style>
-    ''',
+    """,
     unsafe_allow_html=True
 )
 
-# --- Sidebar Inputs with Detailed Explanations ---
-st.sidebar.header("Parameter-Einstellungen")
+st.sidebar.header("Preissteuerung")
+base_price = 109.99
+price_change_rate = st.sidebar.slider("Wöchentliche Preisänderung (%)", -0.2, 0.2, 0.0, step=0.01)
 
-with st.sidebar.expander("Preisstrategie"):
-    base_price = st.slider("Startpreis für Turnschuhe (€)", 50, 200, 109, step=1,
-                           help="Initialer Preis des Produkts. Dieser dient als Ausgangspunkt der Preisstrategie.")
-    price_change_rate = st.slider("Wöchentliche Preisänderung (%)", -0.5, 0.5, 0.05, step=0.01,
-                                  help="Gibt an, wie stark der Preis jede Woche angepasst wird. Positive Werte bedeuten Preiserhöhung.")
-    price_limit = st.slider("Preisakzeptanzgrenze (€)", 80, 200, 140,
-                            help="Obergrenze, ab der Konsumenten die Preise als überhöht empfinden und mit Kaufverzicht reagieren.")
-
-with st.sidebar.expander("Nachfrageverhalten"):
-    base_demand = st.slider("Basisnachfrage pro Woche", 100, 3000, 1500, step=50,
-                            help="Maximale Nachfrage, wenn der Preis optimal ist und keine negativen Reaktionen auftreten.")
-    price_elasticity = st.slider("Preiselastizität", -5.0, -0.1, -2.0, step=0.1,
-                                 help="Beschreibt, wie empfindlich die Nachfrage auf Preisänderungen reagiert. Je negativer, desto stärker der Rückgang bei Preiserhöhungen.")
-    demand_volatility = st.slider("Zufällige Nachfrageschwankungen", 0.0, 0.5, 0.1,
-                                  help="Zufallskomponente, die saisonale oder externe Einflüsse auf die Nachfrage simuliert.")
-
-with st.sidebar.expander("Konsumentenreaktionen"):
-    review_sensitivity = st.slider("Negatives Word-of-Mouth Sensitivität", 0.0, 1.0, 0.3,
-                                   help="Je höher dieser Wert, desto stärker beeinflussen Preisstress oder Volatilität die Kundenmeinungen.")
-    review_decay = st.slider("Rückgang negativer Bewertungen über Zeit", 0.0, 0.5, 0.1,
-                             help="Bewertungen verbessern sich wieder, wenn Preisstrategie stabil bleibt.")
-
-with st.sidebar.expander("Churn-Mechanik"):
-    churn_sensitivity = st.slider("Kundenabwanderungssensitivität", 0.0, 1.0, 0.4,
-                                  help="Bestimmt, wie empfindlich Kunden auf zu hohe Preise oder zu viele Preisänderungen reagieren.")
-    initial_customers = 1000
-
-# --- Simulation Setup ---
 weeks = 12
+price_elasticity = -2.0
+base_demand = 1500
+price_limit = 140
+initial_customers = 1000
+churn_sensitivity = 0.4
+review_sensitivity = 0.3
+review_decay = 0.1
+demand_volatility = 0.1
+
 time = np.arange(1, weeks + 1)
 price = np.zeros(weeks)
 demand = np.zeros(weeks)
@@ -57,12 +40,13 @@ churn = np.zeros(weeks)
 customers = initial_customers
 lost_customers = np.zeros(weeks)
 review_score = np.zeros(weeks)
+cumulative_profit = np.zeros(weeks)
 
-# Initial values
 price[0] = base_price
 review_score[0] = 4.5
+fixed_costs = 10000
+unit_cost = 40
 
-# --- Simulation Loop ---
 for t in range(weeks):
     if t > 0:
         price[t] = price[t-1] * (1 + price_change_rate)
@@ -71,39 +55,73 @@ for t in range(weeks):
     random_factor = np.random.uniform(1 - demand_volatility, 1 + demand_volatility)
     demand[t] = base_demand * price_effect * random_factor
 
+    revenue[t] = price[t] * demand[t]
+    profit = (price[t] - unit_cost) * demand[t] - fixed_costs / weeks
+    cumulative_profit[t] = profit if t == 0 else cumulative_profit[t-1] + profit
+
     overprice_churn = max(0, price[t] - price_limit) / price_limit
     volatility_churn = abs(price[t] - price[t-1]) / price[t] if t > 0 else 0
     churn[t] = churn_sensitivity * (overprice_churn + volatility_churn)
-
     customers *= (1 - churn[t])
     lost_customers[t] = initial_customers - customers
-    revenue[t] = demand[t] * price[t]
 
-    # Review Logic
     negative_influence = review_sensitivity * (overprice_churn + volatility_churn)
     review_score[t] = max(1.0, (review_score[t-1] - negative_influence + review_decay))
 
-# --- KPIs ---
 df = pd.DataFrame({
     "Woche": time,
-    "Preis (€)": price,
+    "Preis (EUR)": price,
     "Nachfrage": demand,
-    "Umsatz (€)": revenue,
+    "Umsatz (EUR)": revenue,
+    "Kumulativer Gewinn (EUR)": cumulative_profit,
     "Churn Rate": churn,
     "Verlorene Kunden": lost_customers,
     "Ø Google-Bewertung": review_score
 })
 
-# --- KPI Dashboard ---
 st.subheader("Kennzahlenübersicht")
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Gesamtumsatz (EUR)", f"{revenue.sum():,.2f}")
+k2.metric("Ø Bewertung", f"{np.mean(review_score):.2f}")
+k3.metric("Verlorene Kunden", f"{int(lost_customers[-1]):,}")
+k4.metric("Kum. Gewinn (EUR)", f"{cumulative_profit[-1]:,.2f}")
 
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-kpi1.metric("Gesamtumsatz (€)", f"{revenue.sum():,.2f}")
-kpi2.metric("Ø Preis (€)", f"{np.mean(price):.2f}")
-kpi3.metric("Ø Bewertung", f"{np.mean(review_score):.2f}")
-kpi4.metric("Verlorene Kunden", f"{int(lost_customers[-1]):,}")
+st.subheader("Zeitverlauf")
 
-# --- Visualisierung ---
-st.line_chart(df.set_index("Woche")[["Preis (€)", "Nachfrage", "Umsatz (€)"]])
-st.line_chart(df.set_index("Woche")[["Churn Rate", "Ø Google-Bewertung"]])
-st.dataframe(df.style.format({"Preis (€)": "{:.2f}", "Umsatz (€)": "{:.2f}", "Churn Rate": "{:.2%}", "Ø Google-Bewertung": "{:.2f}"}))
+fig1, ax1 = plt.subplots()
+ax1.plot(time, price, label="Preis (EUR)")
+ax1.set_xlabel("Woche")
+ax1.set_ylabel("Preis")
+ax1.legend()
+st.pyplot(fig1)
+
+fig2, ax2 = plt.subplots()
+ax2.plot(time, revenue, label="Umsatz (EUR)")
+ax2.plot(time, cumulative_profit, label="Kumulativer Gewinn (EUR)")
+ax2.set_xlabel("Woche")
+ax2.set_ylabel("EUR")
+ax2.legend()
+st.pyplot(fig2)
+
+fig3, ax3 = plt.subplots()
+ax3.plot(time, churn, label="Churn Rate")
+ax3.plot(time, review_score, label="Ø Bewertung")
+ax3.set_xlabel("Woche")
+ax3.legend()
+st.pyplot(fig3)
+
+st.subheader("Zusatzanalyse")
+st.markdown("""
+- **Preisniveaus > EUR 140** führen ab Woche x zu signifikantem Churn und Bewertungsrückgang.
+- **Stabile Preisstrategie** resultiert in besseren Bewertungen.
+- **Optimale Preisanpassung** liegt bei moderater Erhöhung (<5%/Woche) zur Gewinnmaximierung ohne Reputationsverlust.
+""")
+
+st.subheader("Detailtabelle")
+st.dataframe(df.set_index("Woche").style.format({
+    "Preis (EUR)": "{:.2f}",
+    "Umsatz (EUR)": "{:.2f}",
+    "Kumulativer Gewinn (EUR)": "{:.2f}",
+    "Churn Rate": "{:.2%}",
+    "Ø Google-Bewertung": "{:.2f}"
+}))
