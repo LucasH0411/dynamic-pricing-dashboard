@@ -4,10 +4,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Advanced Dynamic Pricing Simulation", layout="wide")
-st.title("👗 Dynamic Pricing Simulation – Modebranche")
+st.title("Dynamic Pricing Simulation – Modebranche")
 
 # --- Sidebar Inputs with Explanations ---
-st.sidebar.header("🔧 Parameter-Einstellungen")
+st.sidebar.header("Parameter-Einstellungen")
 
 with st.sidebar.expander("Preissetzung"):
     base_price = st.slider("Basispreis (€)", 10, 100, 30, help="Ausgangspunkt des Preises pro Artikel.")
@@ -74,7 +74,7 @@ df = pd.DataFrame({
 })
 
 # --- KPI Dashboard ---
-st.subheader("📊 KPIs über 12 Wochen")
+st.subheader("KPIs über 12 Wochen")
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric("Gesamtumsatz (€)", f"{revenue.sum():,.2f}")
