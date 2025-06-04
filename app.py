@@ -35,7 +35,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
     gemäß eines einfachen Churn-Modells.
     """
-    
+   
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -189,6 +189,7 @@ def kpi_columns(df: pd.DataFrame):
     k2.metric("Kumul. Gewinn (EUR)", f"{df['Kumul. Gewinn (EUR)'].iloc[-1]:,.2f}")
     k3.metric("Kundenbasis", f"{df['Kunden'].iloc[-1]:,.0f}")
 
+
 def show_charts(df: pd.DataFrame):
     time = df["Woche"]
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
@@ -262,7 +263,7 @@ def optimization_page():
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Seite",
-    ["Simulation", "Sensitivitätsanalyse", "Optimierung", "Vergleich"],
+    ["Simulation", "Sensitivitätsanalyse", "Optimierung"],
     key="page_select",
 )
 strategy = st.sidebar.selectbox(
@@ -345,39 +346,9 @@ def sensitivity_page():
         " Umsatz, Gewinn und Kundenbasis demonstriert."
     )
 
-def comparison_page():
-    st.title("Strategien vergleichen")
-    strat1 = st.sidebar.selectbox(
-        "Strategie A",
-        ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
-        key="comp_strat1",
-    )
-    strat2 = st.sidebar.selectbox(
-        "Strategie B",
-        ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
-        index=1,
-        key="comp_strat2",
-    )
-    df1 = simulate(strat1, BASE_PRICE)
-    df2 = simulate(strat2, BASE_PRICE)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader(f"Strategie A: {strat1}")
-        kpi_columns(df1)
-        show_charts(df1)
-    with c2:
-        st.subheader(f"Strategie B: {strat2}")
-        kpi_columns(df2)
-        show_charts(df2)
-    st.caption(
-        "Diese Ansicht zeigt zwei Pricing-Agenten parallel, um ihre Wirkung auf Preis, Nachfrage und Gewinn zu vergleichen."
-    )
-
 if page == "Simulation":
     main_page()
 elif page == "Sensitivitätsanalyse":
     sensitivity_page()
-elif page == "Vergleich":
-    comparison_page()
 else:
     optimization_page()
