@@ -51,21 +51,43 @@ review_score[0] = 4.5
 price[0] = base_price
 competitor_price[0] = base_price * np.random.uniform(0.95, 1.05)
 
-# Simulation
+# Entscheidungstheoretisches Modell
+# Diskrete Preisoptionen für die Optimierung
+price_grid = np.linspace(base_price * 0.8, base_price * 1.2, 9)
+competition_sensitivity = 0.2
+samples = 100
+
+# Simulation mit erwartungswertbasiertem Preisentscheid
 for t in range(weeks):
-    # Wettbewerbssimulation
-    if t > 0:
-        competitor_price[t] = base_price * np.random.uniform(0.9 - competition_intensity * 0.1, 1.05)
+# Wettbewerbsunsicherheit durch Stichprobe abbilden
+    competitor_samples = base_price * np.random.uniform(
+        0.9 - competition_intensity * 0.1, 1.05, size=samples
+    )
 
-    # Preisstrategie basierend auf Nachfrageverlauf, Zeit und Wettbewerb
-    time_factor = (weeks - t) / weeks
-    competition_effect = (price[t-1] - competitor_price[t-1]) / base_price if t > 0 else 0
-    adjustment = -0.05 * competition_effect + 0.03 * time_factor
-    price[t] = price[t-1] * (1 + adjustment) if t > 0 else base_price
+    # Erwarteten Gewinn für jede Preisoption berechnen
+    expected_profits = []
+    for p in price_grid:
+        price_factor = (p / base_price) ** price_elasticity
+        demand_samples = (
+            base_demand
+            * price_factor
+            * (1 - competition_sensitivity * np.maximum(0, p - competitor_samples) / p)
+        )
+        profits = (p - unit_cost) * demand_samples - fixed_costs / weeks
+        expected_profits.append(np.mean(profits))
 
-    # Nachfrage mit Elastizität
-    price_effect = (price[t] / base_price) ** price_elasticity
-    demand[t] = base_demand * price_effect
+    # Preis mit maximalem Erwartungswert wählen
+    best_idx = int(np.argmax(expected_profits))
+    price[t] = price_grid[best_idx]
+    competitor_price[t] = np.mean(competitor_samples)
+
+    # Tatsächliche Nachfrage und Gewinne berechnen
+    price_factor = (price[t] / base_price) ** price_elasticity
+    demand[t] = (
+        base_demand
+        * price_factor
+        * (1 - competition_sensitivity * np.maximum(0, price[t] - competitor_price[t]) / price[t])
+    )
 
     # Umsatz, Gewinn, Bewertung
     revenue[t] = price[t] * demand[t]
