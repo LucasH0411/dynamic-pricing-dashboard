@@ -11,117 +11,126 @@ st.markdown(
     <style>
         .main { background-color: #ffffff; }
         .block-container { padding-top: 2rem; }
-        .stSlider > div[data-baseweb="slider"] > div { background: transparent !important; }
         .stMetric { background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #dee2e6; }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-st.sidebar.header("Preissteuerung")
+# Fixe Marktparameter
 base_price = 109.99
-price_change_rate = st.sidebar.slider("Wöchentliche Preisänderung (%)", -0.2, 0.2, 0.0, step=0.01)
-
 weeks = 12
-price_elasticity = -2.0
 base_demand = 1500
-price_limit = 140
+price_elasticity = -2.0
+unit_cost = 40
+fixed_costs = 10000
 initial_customers = 1000
-churn_sensitivity = 0.4
+
+# Steuerbare Wettbewerbsintensität
+st.sidebar.header("Marktumfeld")
+competition_intensity = st.sidebar.slider(
+    "Wettbewerbsintensität (0 = kein Druck, 1 = hoher Druck)", 0.0, 1.0, 0.4, step=0.05,
+    help="Je höher, desto häufiger greifen Wettbewerber mit Preissenkungen an."
+)
+
 review_sensitivity = 0.3
 review_decay = 0.1
-demand_volatility = 0.1
+churn_sensitivity = 0.4
 
+# Initialisierung
 time = np.arange(1, weeks + 1)
 price = np.zeros(weeks)
 demand = np.zeros(weeks)
 revenue = np.zeros(weeks)
-churn = np.zeros(weeks)
-customers = initial_customers
-lost_customers = np.zeros(weeks)
-review_score = np.zeros(weeks)
+profit = np.zeros(weeks)
 cumulative_profit = np.zeros(weeks)
+review_score = np.zeros(weeks)
+competitor_price = np.zeros(weeks)
 
-price[0] = base_price
 review_score[0] = 4.5
-fixed_costs = 10000
-unit_cost = 40
+price[0] = base_price
+competitor_price[0] = base_price * np.random.uniform(0.95, 1.05)
 
+# Simulation
 for t in range(weeks):
+    # Wettbewerbssimulation
     if t > 0:
-        price[t] = price[t-1] * (1 + price_change_rate)
+        competitor_price[t] = base_price * np.random.uniform(0.9 - competition_intensity * 0.1, 1.05)
 
+    # Preisstrategie basierend auf Nachfrageverlauf, Zeit und Wettbewerb
+    time_factor = (weeks - t) / weeks
+    competition_effect = (price[t-1] - competitor_price[t-1]) / base_price if t > 0 else 0
+    adjustment = -0.05 * competition_effect + 0.03 * time_factor
+    price[t] = price[t-1] * (1 + adjustment) if t > 0 else base_price
+
+    # Nachfrage mit Elastizität
     price_effect = (price[t] / base_price) ** price_elasticity
-    random_factor = np.random.uniform(1 - demand_volatility, 1 + demand_volatility)
-    demand[t] = base_demand * price_effect * random_factor
+    demand[t] = base_demand * price_effect
 
+    # Umsatz, Gewinn, Bewertung
     revenue[t] = price[t] * demand[t]
-    profit = (price[t] - unit_cost) * demand[t] - fixed_costs / weeks
-    cumulative_profit[t] = profit if t == 0 else cumulative_profit[t-1] + profit
+    profit[t] = (price[t] - unit_cost) * demand[t] - fixed_costs / weeks
+    cumulative_profit[t] = profit[t] if t == 0 else cumulative_profit[t-1] + profit[t]
 
-    overprice_churn = max(0, price[t] - price_limit) / price_limit
-    volatility_churn = abs(price[t] - price[t-1]) / price[t] if t > 0 else 0
-    churn[t] = churn_sensitivity * (overprice_churn + volatility_churn)
-    customers *= (1 - churn[t])
-    lost_customers[t] = initial_customers - customers
+    # Konsumentenreaktion
+    overpricing = max(0, price[t] - competitor_price[t]) / price[t]
+    review_score[t] = max(1.0, (review_score[t-1] - review_sensitivity * overpricing + review_decay))
 
-    negative_influence = review_sensitivity * (overprice_churn + volatility_churn)
-    review_score[t] = max(1.0, (review_score[t-1] - negative_influence + review_decay))
-
+# DataFrame
 df = pd.DataFrame({
     "Woche": time,
-    "Preis (EUR)": price,
+    "Eigener Preis (EUR)": price,
+    "Wettbewerbspreis (EUR)": competitor_price,
     "Nachfrage": demand,
     "Umsatz (EUR)": revenue,
-    "Kumulativer Gewinn (EUR)": cumulative_profit,
-    "Churn Rate": churn,
-    "Verlorene Kunden": lost_customers,
-    "Ø Google-Bewertung": review_score
+    "Gewinn (EUR)": profit,
+    "Kumul. Gewinn (EUR)": cumulative_profit,
+    "Ø Bewertung": review_score
 })
 
-st.subheader("Kennzahlenübersicht")
+# KPIs
+st.subheader("Strategisches Ziel: Gewinnoptimierung")
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Gesamtumsatz (EUR)", f"{revenue.sum():,.2f}")
-k2.metric("Ø Bewertung", f"{np.mean(review_score):.2f}")
-k3.metric("Verlorene Kunden", f"{int(lost_customers[-1]):,}")
-k4.metric("Kum. Gewinn (EUR)", f"{cumulative_profit[-1]:,.2f}")
+k2.metric("Kumul. Gewinn (EUR)", f"{cumulative_profit[-1]:,.2f}")
+k3.metric("Ø Bewertung", f"{np.mean(review_score):.2f}")
+k4.metric("Wettbewerbsdruck", f"{competition_intensity * 100:.0f}%")
 
-st.subheader("Zeitverlauf")
-
+# Visualisierungen
+st.subheader("Preis- und Wettbewerbsverlauf")
 fig1, ax1 = plt.subplots()
-ax1.plot(time, price, label="Preis (EUR)")
+ax1.plot(time, price, label="Eigener Preis")
+ax1.plot(time, competitor_price, label="Wettbewerber")
 ax1.set_xlabel("Woche")
-ax1.set_ylabel("Preis")
+ax1.set_ylabel("Preis (EUR)")
 ax1.legend()
 st.pyplot(fig1)
 
+st.subheader("Finanzkennzahlen")
 fig2, ax2 = plt.subplots()
-ax2.plot(time, revenue, label="Umsatz (EUR)")
-ax2.plot(time, cumulative_profit, label="Kumulativer Gewinn (EUR)")
+ax2.plot(time, revenue, label="Umsatz")
+ax2.plot(time, profit, label="Gewinn")
+ax2.plot(time, cumulative_profit, label="Kumul. Gewinn")
 ax2.set_xlabel("Woche")
 ax2.set_ylabel("EUR")
 ax2.legend()
 st.pyplot(fig2)
 
+st.subheader("Konsumentenbewertung")
 fig3, ax3 = plt.subplots()
-ax3.plot(time, churn, label="Churn Rate")
 ax3.plot(time, review_score, label="Ø Bewertung")
 ax3.set_xlabel("Woche")
+ax3.set_ylim(1.0, 5.0)
 ax3.legend()
 st.pyplot(fig3)
 
-st.subheader("Zusatzanalyse")
-st.markdown("""
-- **Preisniveaus > EUR 140** führen ab Woche x zu signifikantem Churn und Bewertungsrückgang.
-- **Stabile Preisstrategie** resultiert in besseren Bewertungen.
-- **Optimale Preisanpassung** liegt bei moderater Erhöhung (<5%/Woche) zur Gewinnmaximierung ohne Reputationsverlust.
-""")
-
+# Detailtabelle
 st.subheader("Detailtabelle")
 st.dataframe(df.set_index("Woche").style.format({
-    "Preis (EUR)": "{:.2f}",
+    "Eigener Preis (EUR)": "{:.2f}",
+    "Wettbewerbspreis (EUR)": "{:.2f}",
     "Umsatz (EUR)": "{:.2f}",
-    "Kumulativer Gewinn (EUR)": "{:.2f}",
-    "Churn Rate": "{:.2%}",
-    "Ø Google-Bewertung": "{:.2f}"
+    "Gewinn (EUR)": "{:.2f}",
+    "Kumul. Gewinn (EUR)": "{:.2f}",
+    "Ø Bewertung": "{:.2f}"
 }))

@@ -1,1 +1,1 @@
-# ShopTrend24 – Dynamic Pricing Dashboard
+# ShopTrend24 – Realistic Dynamic Pricing Simulation
