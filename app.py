@@ -8,7 +8,7 @@ st.title("Dynamic Pricing - ShopTrend24")
 
 st.markdown(
     """
-    <style>
+     <style>
         .main { background-color: #ffffff; }
         .block-container { padding-top: 2rem; }
         .stMetric { background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #dee2e6; }
@@ -33,9 +33,7 @@ competition_intensity = st.sidebar.slider(
     help="Je höher, desto häufiger greifen Wettbewerber mit Preissenkungen an."
 )
 
-review_sensitivity = 0.3
-review_decay = 0.1
-churn_sensitivity = 0.4
+churn_sensitivity = 0.3
 
 # Initialisierung
 time = np.arange(1, weeks + 1)
@@ -44,12 +42,12 @@ demand = np.zeros(weeks)
 revenue = np.zeros(weeks)
 profit = np.zeros(weeks)
 cumulative_profit = np.zeros(weeks)
-review_score = np.zeros(weeks)
 competitor_price = np.zeros(weeks)
+customers = np.zeros(weeks)
 
-review_score[0] = 4.5
 price[0] = base_price
 competitor_price[0] = base_price * np.random.uniform(0.95, 1.05)
+customers[0] = initial_customers
 
 # Entscheidungstheoretisches Modell
 # Diskrete Preisoptionen für die Optimierung
@@ -59,7 +57,7 @@ samples = 100
 
 # Simulation mit erwartungswertbasiertem Preisentscheid
 for t in range(weeks):
-# Wettbewerbsunsicherheit durch Stichprobe abbilden
+    # Wettbewerbsunsicherheit durch Stichprobe abbilden
     competitor_samples = base_price * np.random.uniform(
         0.9 - competition_intensity * 0.1, 1.05, size=samples
     )
@@ -68,10 +66,12 @@ for t in range(weeks):
     expected_profits = []
     for p in price_grid:
         price_factor = (p / base_price) ** price_elasticity
+        competition_factor = 1 - competition_sensitivity * np.maximum(0, p - competitor_samples) / p
         demand_samples = (
             base_demand
             * price_factor
-            * (1 - competition_sensitivity * np.maximum(0, p - competitor_samples) / p)
+            * competition_factor
+            * (customers[t-1] / initial_customers if t > 0 else 1)
         )
         profits = (p - unit_cost) * demand_samples - fixed_costs / weeks
         expected_profits.append(np.mean(profits))
@@ -83,20 +83,23 @@ for t in range(weeks):
 
     # Tatsächliche Nachfrage und Gewinne berechnen
     price_factor = (price[t] / base_price) ** price_elasticity
+    competition_factor = 1 - competition_sensitivity * np.maximum(0, price[t] - competitor_price[t]) / price[t]
     demand[t] = (
         base_demand
         * price_factor
-        * (1 - competition_sensitivity * np.maximum(0, price[t] - competitor_price[t]) / price[t])
+        * competition_factor
+        * (customers[t-1] / initial_customers if t > 0 else 1)
     )
 
-    # Umsatz, Gewinn, Bewertung
+    # Umsatz und Gewinn
     revenue[t] = price[t] * demand[t]
     profit[t] = (price[t] - unit_cost) * demand[t] - fixed_costs / weeks
     cumulative_profit[t] = profit[t] if t == 0 else cumulative_profit[t-1] + profit[t]
 
-    # Konsumentenreaktion
+    # Kundenabwanderung bei zu hohem Preis
     overpricing = max(0, price[t] - competitor_price[t]) / price[t]
-    review_score[t] = max(1.0, (review_score[t-1] - review_sensitivity * overpricing + review_decay))
+    churn = churn_sensitivity * overpricing * (customers[t-1] if t > 0 else initial_customers)
+    customers[t] = max(0, (customers[t-1] if t > 0 else initial_customers) - churn)
 
 # DataFrame
 df = pd.DataFrame({
@@ -107,7 +110,7 @@ df = pd.DataFrame({
     "Umsatz (EUR)": revenue,
     "Gewinn (EUR)": profit,
     "Kumul. Gewinn (EUR)": cumulative_profit,
-    "Ø Bewertung": review_score
+    "Kunden": customers
 })
 
 # KPIs
@@ -115,36 +118,35 @@ st.subheader("Strategisches Ziel: Gewinnoptimierung")
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Gesamtumsatz (EUR)", f"{revenue.sum():,.2f}")
 k2.metric("Kumul. Gewinn (EUR)", f"{cumulative_profit[-1]:,.2f}")
-k3.metric("Ø Bewertung", f"{np.mean(review_score):.2f}")
+k3.metric("Kundenbasis", f"{customers[-1]:,.0f}")
 k4.metric("Wettbewerbsdruck", f"{competition_intensity * 100:.0f}%")
 
 # Visualisierungen
-st.subheader("Preis- und Wettbewerbsverlauf")
-fig1, ax1 = plt.subplots()
-ax1.plot(time, price, label="Eigener Preis")
-ax1.plot(time, competitor_price, label="Wettbewerber")
-ax1.set_xlabel("Woche")
-ax1.set_ylabel("Preis (EUR)")
-ax1.legend()
-st.pyplot(fig1)
+st.subheader("Entwicklungen")
+fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
-st.subheader("Finanzkennzahlen")
-fig2, ax2 = plt.subplots()
-ax2.plot(time, revenue, label="Umsatz")
-ax2.plot(time, profit, label="Gewinn")
-ax2.plot(time, cumulative_profit, label="Kumul. Gewinn")
-ax2.set_xlabel("Woche")
-ax2.set_ylabel("EUR")
-ax2.legend()
-st.pyplot(fig2)
+axes[0, 0].plot(time, price, label="Eigener Preis")
+axes[0, 0].plot(time, competitor_price, label="Wettbewerber")
+axes[0, 0].set_xlabel("Woche")
+axes[0, 0].set_ylabel("Preis (EUR)")
+axes[0, 0].legend()
 
-st.subheader("Konsumentenbewertung")
-fig3, ax3 = plt.subplots()
-ax3.plot(time, review_score, label="Ø Bewertung")
-ax3.set_xlabel("Woche")
-ax3.set_ylim(1.0, 5.0)
-ax3.legend()
-st.pyplot(fig3)
+axes[0, 1].plot(time, demand, color="tab:orange")
+axes[0, 1].set_xlabel("Woche")
+axes[0, 1].set_ylabel("Nachfrage")
+
+axes[1, 0].plot(time, profit, label="Gewinn")
+axes[1, 0].set_xlabel("Woche")
+axes[1, 0].set_ylabel("EUR")
+axes[1, 0].legend()
+
+axes[1, 1].plot(time, cumulative_profit, label="Kumul. Gewinn")
+axes[1, 1].set_xlabel("Woche")
+axes[1, 1].set_ylabel("EUR")
+axes[1, 1].legend()
+
+plt.tight_layout()
+st.pyplot(fig)
 
 # Detailtabelle
 st.subheader("Detailtabelle")
@@ -154,5 +156,5 @@ st.dataframe(df.set_index("Woche").style.format({
     "Umsatz (EUR)": "{:.2f}",
     "Gewinn (EUR)": "{:.2f}",
     "Kumul. Gewinn (EUR)": "{:.2f}",
-    "Ø Bewertung": "{:.2f}"
+    "Kunden": "{:.0f}"
 }))
