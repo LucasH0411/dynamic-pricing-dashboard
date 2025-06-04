@@ -17,6 +17,7 @@ COMPETITION_INTENSITY = 0.4
 COMPETITION_SENSITIVITY = 0.2
 CHURN_SENSITIVITY = 0.3
 SAMPLES = 100
+COMPETITOR_VOLATILITY = 0.05  # Zufällige Schwankung des Wettbewerbs
 
 # ------------------------- Simulation ----------------------------
 
@@ -51,16 +52,32 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     price_grid = np.linspace(base_price * 0.8, base_price * 1.2, 9)
 
     for t in range(WEEKS):
-        competitor_price[t] = base_price * np.random.uniform(
-            0.9 - COMPETITION_INTENSITY * 0.1, 1.05
-        )
+        if t > 0:
+            competitor_price[t] = np.clip(
+                competitor_price[t-1]
+                * np.random.uniform(
+                    0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
+                    1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
+                ),
+                base_price * 0.8,
+                base_price * 1.2,
+            )
+        else:
+            competitor_price[t] = competitor_price[0]
 
         if t == 0:
             # In Woche eins bleibt der festgelegte Startpreis bestehen
             pass
         elif strategy == "Entscheidungstheoretisch":
-            competitor_samples = base_price * np.random.uniform(
-                0.9 - COMPETITION_INTENSITY * 0.1, 1.05, size=SAMPLES
+            competitor_samples = np.clip(
+                competitor_price[t]
+                * np.random.uniform(
+                    0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
+                    1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
+                    size=SAMPLES,
+                ),
+                base_price * 0.8,
+                base_price * 1.2,
             )
             expected_profits = []
             for p in price_grid:
@@ -124,10 +141,20 @@ def simulate_constant_price(price_level: float) -> pd.DataFrame:
     customers = np.zeros(WEEKS)
 
     customers[0] = INITIAL_CUSTOMERS
+    competitor_price[0] = BASE_PRICE * np.random.uniform(0.95, 1.05)
     for t in range(WEEKS):
-        competitor_price[t] = BASE_PRICE * np.random.uniform(
-            0.9 - COMPETITION_INTENSITY * 0.1, 1.05
-        )
+        if t > 0:
+            competitor_price[t] = np.clip(
+                competitor_price[t-1]
+                * np.random.uniform(
+                    0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
+                    1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
+                ),
+                BASE_PRICE * 0.8,
+                BASE_PRICE * 1.2,
+            )
+        else:
+            competitor_price[t] = competitor_price[0]
         price_factor = (price_level / BASE_PRICE) ** PRICE_ELASTICITY
         competition_factor = 1 - COMPETITION_SENSITIVITY * max(0, price_level - competitor_price[t]) / price_level
         demand[t] = (
@@ -235,7 +262,7 @@ def optimization_page():
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Seite",
-    ["Simulation", "Sensitivitätsanalyse", "Optimierung"],
+    ["Simulation", "Sensitivitätsanalyse", "Optimierung", "Vergleich"],
     key="page_select",
 )
 strategy = st.sidebar.selectbox(
@@ -318,9 +345,39 @@ def sensitivity_page():
         " Umsatz, Gewinn und Kundenbasis demonstriert."
     )
 
+def comparison_page():
+    st.title("Strategien vergleichen")
+    strat1 = st.sidebar.selectbox(
+        "Strategie A",
+        ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
+        key="comp_strat1",
+    )
+    strat2 = st.sidebar.selectbox(
+        "Strategie B",
+        ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
+        index=1,
+        key="comp_strat2",
+    )
+    df1 = simulate(strat1, BASE_PRICE)
+    df2 = simulate(strat2, BASE_PRICE)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader(f"Strategie A: {strat1}")
+        kpi_columns(df1)
+        show_charts(df1)
+    with c2:
+        st.subheader(f"Strategie B: {strat2}")
+        kpi_columns(df2)
+        show_charts(df2)
+    st.caption(
+        "Diese Ansicht zeigt zwei Pricing-Agenten parallel, um ihre Wirkung auf Preis, Nachfrage und Gewinn zu vergleichen."
+    )
+
 if page == "Simulation":
     main_page()
 elif page == "Sensitivitätsanalyse":
     sensitivity_page()
+elif page == "Vergleich":
+    comparison_page()
 else:
     optimization_page()
