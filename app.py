@@ -10,7 +10,7 @@ BASE_PRICE = 109.99
 WEEKS = 12
 BASE_DEMAND = 1500
 PRICE_ELASTICITY = -2.0
-UNIT_COST = 40
+UNIT_COST = 20
 FIXED_COSTS = 10000
 INITIAL_CUSTOMERS = 1000
 COMPETITION_INTENSITY = 0.4
@@ -26,8 +26,9 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     * **Entscheidungstheoretisch** – wählt aus einem festen Preisraster den
      jenigen Preis mit maximaler Gewinnerwartung, basierend auf zufällig
      simulierten Wettbewerberpreisen.
-    * **Kostenaufschlag** – setzt einen konstanten Aufschlag auf die
-     Stückkosten.
+    * **Kundenbasiert** – passt den Preis mithilfe des bisherigen
+     Nachfrageverlaufs an und reagiert damit auf Veränderungen der
+     Kundennachfrage.
     * **Wettbewerbsanpassung** – orientiert sich am aktuellen Marktpreis.
 
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
@@ -75,8 +76,12 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
                 expected_profits.append(np.mean(profits))
             best_idx = int(np.argmax(expected_profits))
             price[t] = price_grid[best_idx]
-        elif strategy == "Kostenaufschlag":
-            price[t] = UNIT_COST * 1.6
+        elif strategy == "Kundenbasiert":
+            demand_ratio = demand[t-1] / BASE_DEMAND
+            adjustment = 0.05 * (demand_ratio - 1)
+            price[t] = np.clip(
+                price[t-1] * (1 + adjustment), price_grid[0], price_grid[-1]
+            )
         else:  # Wettbewerbsanpassung
             price[t] = competitor_price[t] * 0.98
 
@@ -106,6 +111,49 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
         "Kunden": customers,
     })
 
+
+def simulate_constant_price(price_level: float) -> pd.DataFrame:
+    """Simulate performance with a fixed price across all weeks."""
+    time = np.arange(1, WEEKS + 1)
+    price = np.full(WEEKS, price_level)
+    demand = np.zeros(WEEKS)
+    revenue = np.zeros(WEEKS)
+    profit = np.zeros(WEEKS)
+    cumulative_profit = np.zeros(WEEKS)
+    competitor_price = np.zeros(WEEKS)
+    customers = np.zeros(WEEKS)
+
+    customers[0] = INITIAL_CUSTOMERS
+    for t in range(WEEKS):
+        competitor_price[t] = BASE_PRICE * np.random.uniform(
+            0.9 - COMPETITION_INTENSITY * 0.1, 1.05
+        )
+        price_factor = (price_level / BASE_PRICE) ** PRICE_ELASTICITY
+        competition_factor = 1 - COMPETITION_SENSITIVITY * max(0, price_level - competitor_price[t]) / price_level
+        demand[t] = (
+            BASE_DEMAND
+            * price_factor
+            * competition_factor
+            * (customers[t-1] / INITIAL_CUSTOMERS if t > 0 else 1)
+        )
+        revenue[t] = price_level * demand[t]
+        profit[t] = (price_level - UNIT_COST) * demand[t] - FIXED_COSTS / WEEKS
+        cumulative_profit[t] = profit[t] if t == 0 else cumulative_profit[t-1] + profit[t]
+        overpricing = max(0, price_level - competitor_price[t]) / price_level
+        churn = CHURN_SENSITIVITY * overpricing * (customers[t-1] if t > 0 else INITIAL_CUSTOMERS)
+        customers[t] = max(0, (customers[t-1] if t > 0 else INITIAL_CUSTOMERS) - churn)
+
+    return pd.DataFrame({
+        "Woche": time,
+        "Eigener Preis (EUR)": price,
+        "Wettbewerbspreis (EUR)": competitor_price,
+        "Nachfrage": demand,
+        "Umsatz (EUR)": revenue,
+        "Gewinn (EUR)": profit,
+        "Kumul. Gewinn (EUR)": cumulative_profit,
+        "Kunden": customers,
+    })
+
 # ------------------------- UI Helper -----------------------------
 
 def kpi_columns(df: pd.DataFrame):
@@ -113,7 +161,6 @@ def kpi_columns(df: pd.DataFrame):
     k1.metric("Gesamtumsatz (EUR)", f"{df['Umsatz (EUR)'].sum():,.2f}")
     k2.metric("Kumul. Gewinn (EUR)", f"{df['Kumul. Gewinn (EUR)'].iloc[-1]:,.2f}")
     k3.metric("Kundenbasis", f"{df['Kunden'].iloc[-1]:,.0f}")
-
 
 def show_charts(df: pd.DataFrame):
     time = df["Woche"]
@@ -145,18 +192,55 @@ def show_charts(df: pd.DataFrame):
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     st.pyplot(fig)
 
+
+def optimization_page():
+    st.title("Optimierungsproblem")
+    st.markdown(
+        "Finde das konstante Preisniveau, das den kumulierten Gewinn maximiert"
+    )
+
+    price_min = st.sidebar.number_input(
+        "Minimaler Preis", value=float(BASE_PRICE * 0.8)
+    )
+    price_max = st.sidebar.number_input(
+        "Maximaler Preis", value=float(BASE_PRICE * 1.2)
+    )
+    steps = st.sidebar.slider("Rasterpunkte", 5, 20, 9)
+    price_grid = np.linspace(price_min, price_max, steps)
+    best_price = price_grid[0]
+    best_profit = -np.inf
+    best_df = None
+    profits = []
+    for p in price_grid:
+        df = simulate_constant_price(p)
+        cum_profit = df["Kumul. Gewinn (EUR)"].iloc[-1]
+        profits.append((p, cum_profit))
+        if cum_profit > best_profit:
+            best_profit = cum_profit
+            best_price = p
+            best_df = df
+
+    st.write(
+        f"Optimales konstantes Preisniveau: **{best_price:.2f} EUR** "
+        f"mit {best_profit:,.2f} EUR kumuliertem Gewinn"
+    )
+    kpi_columns(best_df)
+    show_charts(best_df)
+    st.subheader("Ergebnisse des Preisrasters")
+    result_df = pd.DataFrame(profits, columns=["Preis", "Kumul. Gewinn"])
+    st.dataframe(result_df.style.format({"Preis": "{:.2f}", "Kumul. Gewinn": "{:.2f}"}))
+
 # ------------------------- Pages --------------------------------
 
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Seite",
-    ["Simulation", "Sensitivitätsanalyse"],
+    ["Simulation", "Sensitivitätsanalyse", "Optimierung"],
     key="page_select",
 )
-
 strategy = st.sidebar.selectbox(
     "Pricing-Agent",
-    ["Entscheidungstheoretisch", "Kostenaufschlag", "Wettbewerbsanpassung"],
+    ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
     key="strategy_select",
 )
 
@@ -170,8 +254,9 @@ def main_page():
             Der gewinnmaximierende Preis wird gewählt. Liegt er zu weit über dem
             Marktpreis, wandern Kunden ab.
 
-            **Kostenaufschlag** – Ein fixer Aufschlag auf die Stückkosten führt
-            zu einem konstanten Preis, der keine Marktbewegungen berücksichtigt.
+            **Kundenbasiert** – Die Preise orientieren sich am bisherigen
+            Nachfrageverlauf. Steigt die Nachfrage, erhöht sich auch der Preis;
+            sinkt sie, wird der Preis reduziert.
 
             **Wettbewerbsanpassung** – Der Preis orientiert sich am aktuellen
             Wettbewerbsniveau und liegt geringfügig darunter.
@@ -235,5 +320,7 @@ def sensitivity_page():
 
 if page == "Simulation":
     main_page()
-else:
+elif page == "Sensitivitätsanalyse":
     sensitivity_page()
+else:
+    optimization_page()
