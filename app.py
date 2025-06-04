@@ -35,7 +35,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
     gemäß eines einfachen Churn-Modells.
     """
-   
+
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -129,58 +129,6 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     })
 
 
-def simulate_constant_price(price_level: float) -> pd.DataFrame:
-    """Simulate performance with a fixed price across all weeks."""
-    time = np.arange(1, WEEKS + 1)
-    price = np.full(WEEKS, price_level)
-    demand = np.zeros(WEEKS)
-    revenue = np.zeros(WEEKS)
-    profit = np.zeros(WEEKS)
-    cumulative_profit = np.zeros(WEEKS)
-    competitor_price = np.zeros(WEEKS)
-    customers = np.zeros(WEEKS)
-
-    customers[0] = INITIAL_CUSTOMERS
-    competitor_price[0] = BASE_PRICE * np.random.uniform(0.95, 1.05)
-    for t in range(WEEKS):
-        if t > 0:
-            competitor_price[t] = np.clip(
-                competitor_price[t-1]
-                * np.random.uniform(
-                    0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
-                    1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
-                ),
-                BASE_PRICE * 0.8,
-                BASE_PRICE * 1.2,
-            )
-        else:
-            competitor_price[t] = competitor_price[0]
-        price_factor = (price_level / BASE_PRICE) ** PRICE_ELASTICITY
-        competition_factor = 1 - COMPETITION_SENSITIVITY * max(0, price_level - competitor_price[t]) / price_level
-        demand[t] = (
-            BASE_DEMAND
-            * price_factor
-            * competition_factor
-            * (customers[t-1] / INITIAL_CUSTOMERS if t > 0 else 1)
-        )
-        revenue[t] = price_level * demand[t]
-        profit[t] = (price_level - UNIT_COST) * demand[t] - FIXED_COSTS / WEEKS
-        cumulative_profit[t] = profit[t] if t == 0 else cumulative_profit[t-1] + profit[t]
-        overpricing = max(0, price_level - competitor_price[t]) / price_level
-        churn = CHURN_SENSITIVITY * overpricing * (customers[t-1] if t > 0 else INITIAL_CUSTOMERS)
-        customers[t] = max(0, (customers[t-1] if t > 0 else INITIAL_CUSTOMERS) - churn)
-
-    return pd.DataFrame({
-        "Woche": time,
-        "Eigener Preis (EUR)": price,
-        "Wettbewerbspreis (EUR)": competitor_price,
-        "Nachfrage": demand,
-        "Umsatz (EUR)": revenue,
-        "Gewinn (EUR)": profit,
-        "Kumul. Gewinn (EUR)": cumulative_profit,
-        "Kunden": customers,
-    })
-
 # ------------------------- UI Helper -----------------------------
 
 def kpi_columns(df: pd.DataFrame):
@@ -224,23 +172,20 @@ def show_charts(df: pd.DataFrame):
 def optimization_page():
     st.title("Optimierungsproblem")
     st.markdown(
-        "Finde das konstante Preisniveau, das den kumulierten Gewinn maximiert"
+        "Welche Startpreiswahl erzielt beim gewählten Pricing-Agenten den höchsten Gewinn?"
     )
 
-    price_min = st.sidebar.number_input(
-        "Minimaler Preis", value=float(BASE_PRICE * 0.8)
+    start_price = st.sidebar.number_input(
+        "Startpreis (EUR)", value=float(BASE_PRICE)
     )
-    price_max = st.sidebar.number_input(
-        "Maximaler Preis", value=float(BASE_PRICE * 1.2)
-    )
-    steps = st.sidebar.slider("Rasterpunkte", 5, 20, 9)
-    price_grid = np.linspace(price_min, price_max, steps)
-    best_price = price_grid[0]
+
+    search_grid = np.linspace(start_price * 0.8, start_price * 1.2, 15)
+    best_price = search_grid[0]
     best_profit = -np.inf
     best_df = None
     profits = []
-    for p in price_grid:
-        df = simulate_constant_price(p)
+    for p in search_grid:
+        df = simulate(strategy, p)
         cum_profit = df["Kumul. Gewinn (EUR)"].iloc[-1]
         profits.append((p, cum_profit))
         if cum_profit > best_profit:
@@ -249,14 +194,16 @@ def optimization_page():
             best_df = df
 
     st.write(
-        f"Optimales konstantes Preisniveau: **{best_price:.2f} EUR** "
+        f"Optimaler Startpreis: **{best_price:.2f} EUR** "
         f"mit {best_profit:,.2f} EUR kumuliertem Gewinn"
     )
     kpi_columns(best_df)
     show_charts(best_df)
-    st.subheader("Ergebnisse des Preisrasters")
-    result_df = pd.DataFrame(profits, columns=["Preis", "Kumul. Gewinn"])
-    st.dataframe(result_df.style.format({"Preis": "{:.2f}", "Kumul. Gewinn": "{:.2f}"}))
+    st.subheader("Ergebnisse des Suchbereichs")
+    result_df = pd.DataFrame(profits, columns=["Startpreis", "Kumul. Gewinn"])
+    st.dataframe(
+        result_df.style.format({"Startpreis": "{:.2f}", "Kumul. Gewinn": "{:.2f}"})
+    )
 
 # ------------------------- Pages --------------------------------
 
@@ -345,6 +292,7 @@ def sensitivity_page():
         "Hier wird die Wirkung einer prozentualen Preisveränderung auf"
         " Umsatz, Gewinn und Kundenbasis demonstriert."
     )
+
 
 if page == "Simulation":
     main_page()
