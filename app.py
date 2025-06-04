@@ -23,10 +23,15 @@ SAMPLES = 100
 def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     """Simulate weekly performance for the chosen pricing strategy.
 
-    The decision-theoretic agent samples potential Wettbewerberpreise and
-    selects the option from a discretised grid that maximises the expected
-    profit. Customer churn occurs whenever ShopTrend24's price is
-    significantly higher than that of the competition.
+    * **Entscheidungstheoretisch** – wählt aus einem festen Preisraster den
+     jenigen Preis mit maximaler Gewinnerwartung, basierend auf zufällig
+     simulierten Wettbewerberpreisen.
+    * **Kostenaufschlag** – setzt einen konstanten Aufschlag auf die
+     Stückkosten.
+    * **Wettbewerbsanpassung** – orientiert sich am aktuellen Marktpreis.
+
+    Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
+    gemäß eines einfachen Churn-Modells.
     """
     
     time = np.arange(1, WEEKS + 1)
@@ -49,7 +54,10 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
             0.9 - COMPETITION_INTENSITY * 0.1, 1.05
         )
 
-        if strategy == "Entscheidungstheoretisch":
+        if t == 0:
+            # In Woche eins bleibt der festgelegte Startpreis bestehen
+            pass
+        elif strategy == "Entscheidungstheoretisch":
             competitor_samples = base_price * np.random.uniform(
                 0.9 - COMPETITION_INTENSITY * 0.1, 1.05, size=SAMPLES
             )
@@ -157,11 +165,19 @@ def main_page():
     with st.expander("Wie funktioniert der Pricing-Agent?"):
         st.markdown(
             """
-            Der entscheidungstheoretische Agent simuliert in jeder Woche
-            verschiedene Wettbewerberpreise und wählt aus einem diskreten
-            Preisraster denjenigen aus, der den erwarteten Gewinn maximiert.
-            Ist unser Preis dauerhaft deutlich höher als der des Wettbewerbs,
-            sinkt die Kundenbasis und damit die Nachfrage.
+            **Entscheidungstheoretisch** – Für jedes Preisniveau wird der
+            erwartete Gewinn auf Basis zufälliger Wettbewerberpreise berechnet.
+            Der gewinnmaximierende Preis wird gewählt. Liegt er zu weit über dem
+            Marktpreis, wandern Kunden ab.
+
+            **Kostenaufschlag** – Ein fixer Aufschlag auf die Stückkosten führt
+            zu einem konstanten Preis, der keine Marktbewegungen berücksichtigt.
+
+            **Wettbewerbsanpassung** – Der Preis orientiert sich am aktuellen
+            Wettbewerbsniveau und liegt geringfügig darunter.
+
+            Die Nachfrage reagiert auf Preis, Wettbewerb und Abwanderung;
+            gesteuert werden kann letztlich nur der eigene Preis.
             """
         )
     df = simulate(strategy, BASE_PRICE)
