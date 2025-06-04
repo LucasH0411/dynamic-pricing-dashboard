@@ -35,7 +35,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
     gemäß eines einfachen Churn-Modells.
     """
-
+    
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -179,6 +179,20 @@ def optimization_page():
         "Startpreis (EUR)", value=float(BASE_PRICE)
     )
 
+    # Simulation mit dem eingegebenen Startpreis
+    base_df = simulate(strategy, start_price)
+    base_profit = base_df["Kumul. Gewinn (EUR)"].iloc[-1]
+    st.subheader("Simulation mit gewähltem Startpreis")
+    st.write(
+        f"Startpreis {start_price:.2f} EUR führt zu {base_profit:,.2f} EUR kumuliertem Gewinn"
+    )
+    kpi_columns(base_df)
+    with st.expander("Verlauf anzeigen"):
+        show_charts(base_df)
+
+    st.divider()
+
+    st.subheader("Bester Startpreis im Suchbereich")
     search_grid = np.linspace(start_price * 0.8, start_price * 1.2, 15)
     best_price = search_grid[0]
     best_profit = -np.inf
@@ -194,8 +208,7 @@ def optimization_page():
             best_df = df
 
     st.write(
-        f"Optimaler Startpreis: **{best_price:.2f} EUR** "
-        f"mit {best_profit:,.2f} EUR kumuliertem Gewinn"
+        f"Optimaler Startpreis: **{best_price:.2f} EUR** mit {best_profit:,.2f} EUR kumuliertem Gewinn"
     )
     kpi_columns(best_df)
     show_charts(best_df)
