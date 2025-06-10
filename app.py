@@ -8,7 +8,7 @@ st.set_page_config(page_title="Dynamic Pricing - ShopTrend24", layout="wide")
 st.markdown(
     """
     <style>
-        
+
         :root {
             --primary-color: #004A99;
         }
@@ -16,7 +16,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
 
 # Grundparameter
 BASE_PRICE = 109.99
@@ -35,7 +34,7 @@ DEMAND_VOLATILITY = 0.1  # Zufällige Nachfrageschwankung pro Woche
 
 # ------------------------- Simulation ----------------------------
 
-def simulate(strategy: str, base_price: float) -> pd.DataFrame:
+def simulate(strategy: str, base_price: float, seed: int | None = None) -> pd.DataFrame:
     """Simulate weekly performance for the chosen pricing strategy.
 
     * **Entscheidungstheoretisch** – wählt aus einem festen Preisraster den
@@ -50,6 +49,8 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     gemäß eines einfachen Churn-Modells. Zusätzlich schwankt die Nachfrage
     jede Woche zufällig, um realistische Marktbedingungen abzubilden.
     """
+    rng = np.random.default_rng(seed)
+
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -60,7 +61,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     customers = np.zeros(WEEKS)
 
     price[0] = base_price
-    competitor_price[0] = base_price * np.random.uniform(0.95, 1.05)
+    competitor_price[0] = base_price * rng.uniform(0.95, 1.05)
     customers[0] = INITIAL_CUSTOMERS
 
     price_min = base_price * 0.8
@@ -70,7 +71,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
         if t > 0:
             competitor_price[t] = np.clip(
                 competitor_price[t-1]
-                * np.random.uniform(
+                * rng.uniform(
                     0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                     1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                 ),
@@ -92,7 +93,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
             )
             competitor_samples = np.clip(
                 competitor_price[t]
-                * np.random.uniform(
+                * rng.uniform(
                     0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                     1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                     size=SAMPLES,
@@ -109,7 +110,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
                     * price_factor
                     * competition_factor
                     * (customers[t-1] / INITIAL_CUSTOMERS if t > 0 else 1)
-                    * np.random.normal(1, DEMAND_VOLATILITY, size=SAMPLES)
+                    * rng.normal(1, DEMAND_VOLATILITY, size=SAMPLES)
                 )
                 profits = (p - UNIT_COST) * demand_samples - FIXED_COSTS / WEEKS
                 expected_profits.append(np.mean(profits))
@@ -126,7 +127,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
 
         price_factor = (price[t] / base_price) ** PRICE_ELASTICITY
         competition_factor = 1 - COMPETITION_SENSITIVITY * max(0, price[t] - competitor_price[t]) / price[t]
-        demand_shock = np.random.normal(1, DEMAND_VOLATILITY)
+        demand_shock = rng.normal(1, DEMAND_VOLATILITY)
         demand[t] = (
             BASE_DEMAND
             * price_factor
@@ -259,8 +260,8 @@ def sensitivity_page():
         step=1,
         key="price_delta",
     )
-    base_df = simulate(strategy, BASE_PRICE)
-    test_df = simulate(strategy, BASE_PRICE * (1 + delta / 100))
+    base_df = simulate(strategy, BASE_PRICE, seed=42)
+    test_df = simulate(strategy, BASE_PRICE * (1 + delta / 100), seed=42)
     k1, k2, k3 = st.columns(3)
     k1.metric(
         "Gesamtumsatz (EUR)",
