@@ -37,7 +37,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     gemäß eines einfachen Churn-Modells. Zusätzlich schwankt die Nachfrage
     jede Woche zufällig, um realistische Marktbedingungen abzubilden.
     """
-  
+
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -51,7 +51,8 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     competitor_price[0] = base_price * np.random.uniform(0.95, 1.05)
     customers[0] = INITIAL_CUSTOMERS
 
-    price_grid = np.linspace(base_price * 0.8, base_price * 1.2, 9)
+    price_min = base_price * 0.8
+    price_max = base_price * 1.2
 
     for t in range(WEEKS):
         if t > 0:
@@ -61,8 +62,8 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
                     0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                     1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                 ),
-                base_price * 0.8,
-                base_price * 1.2,
+                price_min,
+                price_max,
             )
         else:
             competitor_price[t] = competitor_price[0]
@@ -71,6 +72,12 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
             # In Woche eins bleibt der festgelegte Startpreis bestehen
             pass
         elif strategy == "Entscheidungstheoretisch":
+            # Dynamisches Preisraster um den zuletzt gewählten Preis
+            price_grid = np.linspace(
+                max(price_min, price[t-1] * 0.95),
+                min(price_max, price[t-1] * 1.05),
+                9,
+            )
             competitor_samples = np.clip(
                 competitor_price[t]
                 * np.random.uniform(
@@ -78,8 +85,8 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
                     1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                     size=SAMPLES,
                 ),
-                base_price * 0.8,
-                base_price * 1.2,
+                price_min,
+                price_max,
             )
             expected_profits = []
             for p in price_grid:
@@ -100,10 +107,10 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
             demand_ratio = demand[t-1] / BASE_DEMAND
             adjustment = 0.05 * (demand_ratio - 1)
             price[t] = np.clip(
-                price[t-1] * (1 + adjustment), price_grid[0], price_grid[-1]
+                price[t-1] * (1 + adjustment), price_min, price_max
             )
         else:  # Wettbewerbsanpassung
-            price[t] = competitor_price[t] * 0.98
+            price[t] = np.clip(competitor_price[t] * 0.98, price_min, price_max)
 
         price_factor = (price[t] / base_price) ** PRICE_ELASTICITY
         competition_factor = 1 - COMPETITION_SENSITIVITY * max(0, price[t] - competitor_price[t]) / price[t]
@@ -185,7 +192,6 @@ page = st.sidebar.radio(
     key="page_select",
 )
 
-
 if st.session_state.get("last_page") != page:
     if page == "Sensitivitätsanalyse":
         st.session_state.pop("price_delta", None)
@@ -195,7 +201,6 @@ strategy = st.sidebar.selectbox(
     ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
     key="strategy_select",
 )
-
 
 def main_page():
     st.title("Dynamic Pricing - ShopTrend24")
