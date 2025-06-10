@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Dynamic Pricing - ShopTrend24", layout="wide")
 
 # Grundparameter
-# Grundparameter
 BASE_PRICE = 109.99
 WEEKS = 12
 BASE_DEMAND = 1500
@@ -19,6 +18,7 @@ COMPETITION_SENSITIVITY = 0.2
 CHURN_SENSITIVITY = 0.3
 SAMPLES = 100
 COMPETITOR_VOLATILITY = 0.05  # Zufällige Schwankung des Wettbewerbs
+DEMAND_VOLATILITY = 0.1  # Zufällige Nachfrageschwankung pro Woche
 
 # ------------------------- Simulation ----------------------------
 
@@ -34,7 +34,8 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     * **Wettbewerbsanpassung** – orientiert sich am aktuellen Marktpreis.
 
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
-    gemäß eines einfachen Churn-Modells.
+    gemäß eines einfachen Churn-Modells. Zusätzlich schwankt die Nachfrage
+    jede Woche zufällig, um realistische Marktbedingungen abzubilden.
     """
   
     time = np.arange(1, WEEKS + 1)
@@ -89,6 +90,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
                     * price_factor
                     * competition_factor
                     * (customers[t-1] / INITIAL_CUSTOMERS if t > 0 else 1)
+                    * np.random.normal(1, DEMAND_VOLATILITY, size=SAMPLES)
                 )
                 profits = (p - UNIT_COST) * demand_samples - FIXED_COSTS / WEEKS
                 expected_profits.append(np.mean(profits))
@@ -105,12 +107,15 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
 
         price_factor = (price[t] / base_price) ** PRICE_ELASTICITY
         competition_factor = 1 - COMPETITION_SENSITIVITY * max(0, price[t] - competitor_price[t]) / price[t]
+        demand_shock = np.random.normal(1, DEMAND_VOLATILITY)
         demand[t] = (
             BASE_DEMAND
             * price_factor
             * competition_factor
             * (customers[t-1] / INITIAL_CUSTOMERS if t > 0 else 1)
+            * demand_shock
         )
+        demand[t] = max(demand[t], 0)
         revenue[t] = price[t] * demand[t]
         profit[t] = (price[t] - UNIT_COST) * demand[t] - FIXED_COSTS / WEEKS
         cumulative_profit[t] = profit[t] if t == 0 else cumulative_profit[t-1] + profit[t]
