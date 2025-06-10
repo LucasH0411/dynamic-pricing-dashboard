@@ -5,6 +5,17 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Dynamic Pricing - ShopTrend24", layout="wide")
 
+st.markdown(
+    """
+    <style>
+        :root {
+            --primary-color: #004A99;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Grundparameter
 BASE_PRICE = 109.99
 WEEKS = 12
@@ -37,7 +48,6 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     gemäß eines einfachen Churn-Modells. Zusätzlich schwankt die Nachfrage
     jede Woche zufällig, um realistische Marktbedingungen abzubilden.
     """
-
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -156,8 +166,8 @@ def show_charts(df: pd.DataFrame):
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle("ShopTrend24 Simulationsergebnisse", fontsize=14)
 
-    axes[0, 0].plot(time, df["Eigener Preis (EUR)"], label="ShopTrend24")
-    axes[0, 0].plot(time, df["Wettbewerbspreis (EUR)"], label="Wettbewerber")
+    axes[0, 0].plot(time, df["Eigener Preis (EUR)"], label="ShopTrend24", color="#004A99")
+    axes[0, 0].plot(time, df["Wettbewerbspreis (EUR)"], label="Wettbewerber", color="tab:gray")
     axes[0, 0].set_title("Preisentwicklung")
     axes[0, 0].set_xlabel("Woche")
     axes[0, 0].set_ylabel("Preis (EUR)")
@@ -168,12 +178,12 @@ def show_charts(df: pd.DataFrame):
     axes[0, 1].set_xlabel("Woche")
     axes[0, 1].set_ylabel("Nachfrage")
 
-    axes[1, 0].plot(time, df["Gewinn (EUR)"])
+    axes[1, 0].plot(time, df["Gewinn (EUR)"], color="#004A99")
     axes[1, 0].set_title("Gewinn pro Woche")
     axes[1, 0].set_xlabel("Woche")
     axes[1, 0].set_ylabel("EUR")
 
-    axes[1, 1].plot(time, df["Kumul. Gewinn (EUR)"])
+    axes[1, 1].plot(time, df["Kumul. Gewinn (EUR)"], color="#004A99")
     axes[1, 1].set_title("Kumulierter Gewinn")
     axes[1, 1].set_xlabel("Woche")
     axes[1, 1].set_ylabel("EUR")
@@ -185,6 +195,7 @@ def show_charts(df: pd.DataFrame):
 
 # ------------------------- Pages --------------------------------
 
+st.sidebar.image("logo.svg", use_column_width=True)
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Seite",
@@ -203,6 +214,7 @@ strategy = st.sidebar.selectbox(
 )
 
 def main_page():
+    st.image("logo.svg", width=150)
     st.title("Dynamic Pricing - ShopTrend24")
     with st.expander("Wie funktioniert der Pricing-Agent?"):
         st.markdown(
