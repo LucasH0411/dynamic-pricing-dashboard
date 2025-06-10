@@ -34,9 +34,8 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
 
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
     gemäß eines einfachen Churn-Modells.
-    """
 
-    time = np.arange(1, WEEKS + 1)
+   time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
     revenue = np.zeros(WEEKS)
@@ -182,7 +181,7 @@ page = st.sidebar.radio(
 
 if st.session_state.get("last_page") != page:
     if page == "Sensitivitätsanalyse":
-        st.session_state["price_delta"] = 0
+        st.session_state.pop("price_delta", None)
     st.session_state["last_page"] = page
 strategy = st.sidebar.selectbox(
     "Pricing-Agent",
@@ -232,7 +231,7 @@ def sensitivity_page():
         "Preisänderung (%)",
         -20,
         20,
-        st.session_state.get("price_delta", 0),
+        0,
         step=1,
         key="price_delta",
     )
