@@ -8,6 +8,7 @@ st.set_page_config(page_title="Dynamic Pricing - ShopTrend24", layout="wide")
 st.markdown(
     """
     <style>
+        
         :root {
             --primary-color: #004A99;
         }
@@ -15,6 +16,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # Grundparameter
 BASE_PRICE = 109.99
@@ -195,7 +197,6 @@ def show_charts(df: pd.DataFrame):
 
 # ------------------------- Pages --------------------------------
 
-st.sidebar.image("logo.svg", use_column_width=True)
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Seite",
@@ -214,7 +215,6 @@ strategy = st.sidebar.selectbox(
 )
 
 def main_page():
-    st.image("logo.svg", width=150)
     st.title("Dynamic Pricing - ShopTrend24")
     with st.expander("Wie funktioniert der Pricing-Agent?"):
         st.markdown(
