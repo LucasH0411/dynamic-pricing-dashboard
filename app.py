@@ -61,11 +61,17 @@ def simulate(strategy: str, base_price: float, seed: int | None = None) -> pd.Da
     customers = np.zeros(WEEKS)
 
     price[0] = base_price
-    competitor_price[0] = base_price * rng.uniform(0.95, 1.05)
+    # Wettbewerber folgt einem stochastischen Pfad, der nicht vom eigenen
+    # Startpreis beeinflusst wird. Dadurch lassen sich unterschiedliche
+    # Preisniveaus fair vergleichen.
+    competitor_price[0] = BASE_PRICE * rng.uniform(0.95, 1.05)
     customers[0] = INITIAL_CUSTOMERS
 
     price_min = base_price * 0.8
     price_max = base_price * 1.2
+
+    competitor_min = BASE_PRICE * 0.8
+    competitor_max = BASE_PRICE * 1.2
 
     for t in range(WEEKS):
         if t > 0:
@@ -75,8 +81,8 @@ def simulate(strategy: str, base_price: float, seed: int | None = None) -> pd.Da
                     0.95 - COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                     1.05 + COMPETITION_INTENSITY * COMPETITOR_VOLATILITY,
                 ),
-                price_min,
-                price_max,
+                competitor_min,
+                competitor_max,
             )
         else:
             competitor_price[t] = competitor_price[0]
@@ -139,9 +145,14 @@ def simulate(strategy: str, base_price: float, seed: int | None = None) -> pd.Da
         revenue[t] = price[t] * demand[t]
         profit[t] = (price[t] - UNIT_COST) * demand[t] - FIXED_COSTS / WEEKS
         cumulative_profit[t] = profit[t] if t == 0 else cumulative_profit[t-1] + profit[t]
-        overpricing = max(0, price[t] - competitor_price[t]) / price[t]
-        churn = CHURN_SENSITIVITY * overpricing * (customers[t-1] if t > 0 else INITIAL_CUSTOMERS)
-        customers[t] = max(0, (customers[t-1] if t > 0 else INITIAL_CUSTOMERS) - churn)
+
+        prev_cust = customers[t-1] if t > 0 else INITIAL_CUSTOMERS
+        if price[t] > competitor_price[t]:
+            change = CHURN_SENSITIVITY * (price[t] - competitor_price[t]) / price[t] * prev_cust
+            customers[t] = max(0, prev_cust - change)
+        else:
+            change = CHURN_SENSITIVITY * (competitor_price[t] - price[t]) / competitor_price[t] * prev_cust
+            customers[t] = prev_cust + change
 
     return pd.DataFrame({
         "Woche": time,
