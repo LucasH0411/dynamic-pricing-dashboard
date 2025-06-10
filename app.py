@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Dynamic Pricing - ShopTrend24", layout="wide")
 
 # Grundparameter
+# Grundparameter
 BASE_PRICE = 109.99
 WEEKS = 12
 BASE_DEMAND = 1500
@@ -34,8 +35,9 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
 
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
     gemäß eines einfachen Churn-Modells.
-
-   time = np.arange(1, WEEKS + 1)
+    """
+  
+    time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
     revenue = np.zeros(WEEKS)
