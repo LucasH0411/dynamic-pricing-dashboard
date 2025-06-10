@@ -35,7 +35,7 @@ def simulate(strategy: str, base_price: float) -> pd.DataFrame:
     Übersteigt unser Preis dauerhaft den Wettbewerb, sinkt die Kundenbasis
     gemäß eines einfachen Churn-Modells.
     """
-    
+
     time = np.arange(1, WEEKS + 1)
     price = np.zeros(WEEKS)
     demand = np.zeros(WEEKS)
@@ -169,68 +169,27 @@ def show_charts(df: pd.DataFrame):
     st.pyplot(fig)
 
 
-def optimization_page():
-    st.title("Optimierungsproblem")
-    st.markdown(
-        "Welche Startpreiswahl erzielt beim gewählten Pricing-Agenten den höchsten Gewinn?"
-    )
-
-    start_price = st.sidebar.number_input(
-        "Startpreis (EUR)", value=float(BASE_PRICE)
-    )
-
-    # Simulation mit dem eingegebenen Startpreis
-    base_df = simulate(strategy, start_price)
-    base_profit = base_df["Kumul. Gewinn (EUR)"].iloc[-1]
-    st.subheader("Simulation mit gewähltem Startpreis")
-    st.write(
-        f"Startpreis {start_price:.2f} EUR führt zu {base_profit:,.2f} EUR kumuliertem Gewinn"
-    )
-    kpi_columns(base_df)
-    with st.expander("Verlauf anzeigen"):
-        show_charts(base_df)
-
-    st.divider()
-
-    st.subheader("Bester Startpreis im Suchbereich")
-    search_grid = np.linspace(start_price * 0.8, start_price * 1.2, 15)
-    best_price = search_grid[0]
-    best_profit = -np.inf
-    best_df = None
-    profits = []
-    for p in search_grid:
-        df = simulate(strategy, p)
-        cum_profit = df["Kumul. Gewinn (EUR)"].iloc[-1]
-        profits.append((p, cum_profit))
-        if cum_profit > best_profit:
-            best_profit = cum_profit
-            best_price = p
-            best_df = df
-
-    st.write(
-        f"Optimaler Startpreis: **{best_price:.2f} EUR** mit {best_profit:,.2f} EUR kumuliertem Gewinn"
-    )
-    kpi_columns(best_df)
-    show_charts(best_df)
-    st.subheader("Ergebnisse des Suchbereichs")
-    result_df = pd.DataFrame(profits, columns=["Startpreis", "Kumul. Gewinn"])
-    st.dataframe(
-        result_df.style.format({"Startpreis": "{:.2f}", "Kumul. Gewinn": "{:.2f}"})
-    )
 
 # ------------------------- Pages --------------------------------
 
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Seite",
-    ["Simulation", "Sensitivitätsanalyse", "Optimierung"],
+    ["Simulation", "Sensitivitätsanalyse"],
     key="page_select",
 )
+
+
+if st.session_state.get("last_page") != page:
+    if page == "Sensitivitätsanalyse":
+        st.session_state["price_delta"] = 0
+    st.session_state["last_page"] = page
 strategy = st.sidebar.selectbox(
     "Pricing-Agent",
     ["Entscheidungstheoretisch", "Kundenbasiert", "Wettbewerbsanpassung"],
     key="strategy_select",
 )
+
 
 def main_page():
     st.title("Dynamic Pricing - ShopTrend24")
@@ -257,11 +216,6 @@ def main_page():
     kpi_columns(df)
     st.subheader("Entwicklungen")
     show_charts(df)
-    st.caption(
-        "Die obere linke Grafik vergleicht den von ShopTrend24 gewählten Preis"
-        " mit dem durchschnittlichen Wettbewerberpreis. Daneben sowie darunter"
-        " werden Nachfrage, Wochengewinn und kumulierter Gewinn dargestellt."
-    )
     st.subheader("Detailtabelle")
     st.dataframe(df.set_index("Woche").style.format({
         "Eigener Preis (EUR)": "{:.2f}",
@@ -278,7 +232,7 @@ def sensitivity_page():
         "Preisänderung (%)",
         -20,
         20,
-        0,
+        st.session_state.get("price_delta", 0),
         step=1,
         key="price_delta",
     )
@@ -301,15 +255,8 @@ def sensitivity_page():
     )
     st.subheader("Entwicklungen")
     show_charts(test_df)
-    st.caption(
-        "Hier wird die Wirkung einer prozentualen Preisveränderung auf"
-        " Umsatz, Gewinn und Kundenbasis demonstriert."
-    )
-
 
 if page == "Simulation":
     main_page()
-elif page == "Sensitivitätsanalyse":
+else:  # Sensitivitätsanalyse
     sensitivity_page()
-else:
-    optimization_page()
